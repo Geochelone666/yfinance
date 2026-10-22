@@ -1,0 +1,28 @@
+name: Offline utility regressions
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  offline-utils:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Set up Python
+        env:
+          PYTHON_VERSION: ${{ matrix.python }}
+        run: |
+          uv python install "$PYTHON_VERSION"
+          uv venv --python "$PYTHON_VERSION"
+      - run: uv pip install -e . pytest
+      - name: Test utility functions without live market requests
+        run: uv run --no-sync python -m pytest tests/test_utils.py tests/test_intraday_event_merge.py -q
