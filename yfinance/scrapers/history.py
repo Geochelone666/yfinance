@@ -1132,11 +1132,28 @@ class PriceHistory:
                 adj = df_block['Adj Close'] / df_block['Close']
                 f_tag = (df_block[price_cols].to_numpy() == tag).any(axis=1)
                 if f_tag.any():
-                    adj[f_tag] = np.nan; adj = adj.ffill().bfill()
+                    adj[f_tag] = np.nan
                 post_adj = adj.iloc[-1]
                 if np.isnan(post_adj):
-                    # Then there were no non-nan rows in df_block
-                    post_adj = 1.0
+                    # Block's last row is tagged, so its adjustment ratio is unknown.
+                    # ffill would copy the previous row's ratio, but the ratio changes
+                    # across an ex-dividend date, so that is wrong when a dividend sits
+                    # between the last good row and the block end. Walk forward from the
+                    # most recent good row instead, applying Yahoo's adjustment factor
+                    # (1 - div/prev_close) for each ex-dividend date in between.
+                    f_good = (~adj.isna()).to_numpy()
+                    if f_good.any():
+                        last_good_loc = np.where(f_good)[0][-1]
+                        post_adj = adj.iloc[last_good_loc]
+                        for k in range(last_good_loc + 1, len(df_block)):
+                            div = df_block['Dividends'].iloc[k] if 'Dividends' in df_block.columns else 0.0
+                            prev_close = df_block['Close'].iloc[k - 1]
+                            if div and not np.isnan(div) and div != 0.0 \
+                                    and not np.isnan(prev_close) and prev_close > 0:
+                                post_adj = post_adj / (1.0 - div / prev_close)
+                    else:
+                        # Then there were no non-nan rows in df_block
+                        post_adj = 1.0
             else:
                 post_adj = df_v2['Adj Close'].iloc[post_idx] / df_v2['Close'].iloc[post_idx]
             df_new_adjLast = df_new['Adj Close'].iloc[-1] / df_new['Close'].iloc[-1]
@@ -1146,7 +1163,11 @@ class PriceHistory:
                     df_new_adjLast = df_new['Adj Close'].iloc[-2] / df_new['Close'].iloc[-2]
             if post_idx < len(df_v2) and df_v2['Dividends'].iloc[post_idx] != 0:
                 div = df_v2['Dividends'].iloc[post_idx]
-                close_before = df_new['Close'].iloc[-1]
+                # Dividend factor must use the block's own Close, not the fine-grained
+                # data's Close which can sit on a different (e.g. post-market) basis.
+                close_before = df_v2['Close'].iloc[post_idx - 1]
+                if np.isnan(close_before) or close_before == tag:
+                    close_before = df_new['Close'].iloc[-1]
                 adj = 1 - div / close_before
                 post_adj *= adj
             adj_correction = post_adj / df_new_adjLast
@@ -1193,7 +1214,16 @@ class PriceHistory:
                     # Assume 'Adj Close' also corrupted, easier than detecting whether true
                     df_v2.loc[dt, "Adj Close"] = df_new_row["Adj Close"]
                 elif "Adj Close" in bad_fields:
-                    df_v2.loc[dt, "Adj Close"] = df_new_row["Adj Close"]
+                    # The fine-grained data can sit on a different price basis than the
+                    # block being repaired (e.g. prepost=True makes the aggregated "last"
+                    # Close a post-market trade, not the official close). Its absolute
+                    # 'Adj Close' is scaled to that basis, so copying it directly corrupts
+                    # the row. 'Adj Close' is 'Close' times a pure adjustment ratio, so
+                    # transfer the fine ratio onto the block's own Close instead.
+                    fine_close = df_new_row["Close"]
+                    if not np.isnan(fine_close) and fine_close != 0:
+                        fine_adj_ratio = df_new_row["Adj Close"] / fine_close
+                        df_v2.loc[dt, "Adj Close"] = df_v2.loc[dt, "Close"] * fine_adj_ratio
                 if "Volume" in bad_fields:
                     df_v2.loc[dt, "Volume"] = df_new_row["Volume"].round().astype('int')
                 df_v2.loc[dt, "Repaired?"] = True

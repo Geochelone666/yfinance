@@ -361,6 +361,12 @@ class TestPriceRepair(unittest.TestCase):
 
         correct_df = dat.history(period='1mo', auto_adjust=False)
 
+        # Yahoo itself sometimes returns rows with NaN prices (e.g. the
+        # current day before the close is published). _fix_zeroes will
+        # legitimately repair those too, so they cannot serve as reference
+        # rows - exclude them from both the damage and the comparison.
+        correct_df = correct_df.dropna(subset=["Open", "Low", "High", "Close"])
+
         correct_df_active = correct_df[correct_df['Volume']>0]
         dt_bad = correct_df_active.index[len(correct_df_active)//2]
         df_bad = correct_df.copy()
