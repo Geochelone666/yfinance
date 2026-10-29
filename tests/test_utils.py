@@ -12,6 +12,7 @@ from datetime import datetime
 from unittest import TestSuite
 
 import warnings
+import pytest
 
 import pandas as pd
 
@@ -22,6 +23,7 @@ from yfinance.utils import (
     _dts_in_same_interval,
     _parse_user_dt,
     _interval_to_timedelta,
+    fix_Yahoo_returning_live_separate,
 )
 
 
@@ -260,10 +262,6 @@ def suite():
 
 if __name__ == '__main__':
     unittest.main()
-"""Offline weekly live-row boundary regressions; no Yahoo requests."""
-import pandas as pd
-import pytest
-from yfinance.utils import _dts_in_same_interval, fix_Yahoo_returning_live_separate
 
 
 @pytest.mark.parametrize('start,end', [('2026-03-02','2026-03-09'),('2026-03-23','2026-03-30'),
