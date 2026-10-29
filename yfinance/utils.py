@@ -662,7 +662,10 @@ def _dts_in_same_interval(dt1, dt2, interval):
     if interval == '1d':
         last_rows_same_interval = dt1.date() == dt2.date()
     elif interval == "1wk":
-        last_rows_same_interval = (dt2 - dt1).days < 7
+        # Weekly bars follow exchange-local calendar days, not elapsed UTC
+        # hours: a spring-forward week is only 167 hours long.
+        day_gap = (dt2.date() - dt1.date()).days
+        last_rows_same_interval = 0 <= day_gap < 7
     elif interval == "1mo":
         last_rows_same_interval = dt1.month == dt2.month and dt1.year == dt2.year
     elif interval == "3mo":
