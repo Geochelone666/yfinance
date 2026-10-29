@@ -662,7 +662,10 @@ def _dts_in_same_interval(dt1, dt2, interval):
     if interval == '1d':
         last_rows_same_interval = dt1.date() == dt2.date()
     elif interval == "1wk":
-        last_rows_same_interval = (dt2 - dt1).days < 7
+        # Weekly bars follow exchange-local calendar days, not elapsed UTC
+        # hours: a spring-forward week is only 167 hours long.
+        day_gap = (dt2.date() - dt1.date()).days
+        last_rows_same_interval = 0 <= day_gap < 7
     elif interval == "1mo":
         last_rows_same_interval = dt1.month == dt2.month and dt1.year == dt2.year
     elif interval == "3mo":
@@ -673,12 +676,9 @@ def _dts_in_same_interval(dt1, dt2, interval):
         quarter_diff = q2 - q1 + 4*year_diff
         last_rows_same_interval = quarter_diff == 0
     elif interval[-1] == "d":
-        # Multi-day intervals e.g. "5d". _interval_to_timedelta() returns a
-        # relativedelta for day intervals, which cannot be compared with the
-        # Timedelta (dt2 - dt1) and raises TypeError, so build a Timedelta
-        # directly. unit="D" rather than days=... keeps the numpy>=2.5
-        # "generic unit" deprecation warning silent.
-        last_rows_same_interval = (dt2 - dt1) < _pd.Timedelta(int(interval[:-1]), unit="D")
+        # Multi-day bars also follow exchange-local calendar days.
+        day_gap = (dt2.date() - dt1.date()).days
+        last_rows_same_interval = 0 <= day_gap < int(interval[:-1])
     else:
         last_rows_same_interval = (dt2 - dt1) < _interval_to_timedelta(interval)
     return last_rows_same_interval
