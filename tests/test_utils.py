@@ -285,3 +285,25 @@ def test_spring_forward_does_not_merge_two_weekly_bars():
 def test_six_calendar_days_still_share_rolling_week():
     start=pd.Timestamp('2026-03-02',tz='America/New_York')
     assert _dts_in_same_interval(start,pd.Timestamp('2026-03-08 23:00',tz='America/New_York'),'1wk')
+
+
+@pytest.mark.parametrize('zone', ['America/New_York', 'Europe/London'])
+@pytest.mark.parametrize('start', ['2026-03-06', '2026-03-27', '2026-10-23', '2026-10-30'])
+def test_multiday_uses_local_calendar_boundary(zone, start):
+    begin = pd.Timestamp(start, tz=zone)
+    boundary = begin + pd.DateOffset(days=5)
+    inside = begin + pd.DateOffset(days=4)
+    assert not _dts_in_same_interval(begin, boundary, '5d')
+    assert _dts_in_same_interval(begin, inside, '5d')
+    assert not _dts_in_same_interval(begin, begin - pd.DateOffset(days=1), '5d')
+
+
+def test_spring_forward_does_not_merge_two_five_day_bars():
+    index = pd.DatetimeIndex(['2026-03-06', '2026-03-11'], tz='America/New_York')
+    quotes = pd.DataFrame({'Open': [10., 20.], 'High': [12., 22.], 'Low': [9., 19.],
+                           'Close': [11., 21.], 'Adj Close': [11., 21.], 'Volume': [100, 200],
+                           'Dividends': [0., 0.], 'Stock Splits': [0., 0.]}, index=index)
+    original = quotes.copy(deep=True)
+    actual, dropped = fix_Yahoo_returning_live_separate(quotes, '5d', 'America/New_York', False)
+    pd.testing.assert_frame_equal(actual, original)
+    assert dropped is None
